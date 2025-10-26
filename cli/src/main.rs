@@ -86,6 +86,13 @@ enum Commands {
         #[arg(short, long)]
         contract: String,
     },
+    /// Check if address is admin
+    IsAdmin {
+        #[arg(short, long)]
+        contract: String,
+        #[arg(short, long)]
+        address: String,
+    },
 }
 
 #[tokio::main]
@@ -128,6 +135,9 @@ async fn main() -> Result<()> {
         }
         Commands::HasEndpoint { url, contract } => {
             call_has_endpoint(contract, url).await?;
+        }
+        Commands::IsAdmin { contract, address } => {
+            call_is_admin(contract, address).await?;
         }
     }
 
@@ -588,10 +598,59 @@ async fn call_remove_admin(contract: String, admin: String) -> Result<()> {
     Ok(())
 }
 
-async fn call_get_endpoints(_contract: String) -> Result<()> {
-    println!("Getting all endpoints...");
-    println!("⚠️  Read operations temporarily disabled due to API changes");
-    println!("Use a block explorer to view contract state.");
+async fn call_get_endpoints(contract: String) -> Result<()> {
+    println!("Getting all endpoints from: {}", contract);
+    
+    let config = Config::load("config.toml")?;
+    let contract_address: Address = contract.parse()?;
+    
+    // Call getAllEndpoints() view function
+    // Method ID: keccak256("getAllEndpoints()")[0:4]
+    let method_id = ethers::utils::keccak256("getAllEndpoints()")[0..4].to_vec();
+    let call_data = method_id;
+    
+    // Use eth_call to query the contract
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "eth_call",
+        "params": [{
+            "to": format!("{:#x}", contract_address),
+            "data": format!("0x{}", hex::encode(&call_data))
+        }, "latest"],
+        "id": 1
+    });
+    
+    let client = reqwest::Client::new();
+    let response: serde_json::Value = client
+        .post(&config.network.rpc_url)
+        .json(&request)
+        .send()
+        .await?
+        .json()
+        .await?;
+    
+    if let Some(result) = response["result"].as_str() {
+        let result_bytes = hex::decode(result.trim_start_matches("0x"))?;
+        
+        // Decode the result: string[] memory
+        let tokens = ethers::abi::decode(&[ethers::abi::ParamType::Array(
+            Box::new(ethers::abi::ParamType::String)
+        )], result_bytes.as_slice())?;
+        
+        if let Some(ethers::abi::Token::Array(arr)) = tokens.first() {
+            println!("\n✅ Found {} endpoints:\n", arr.len());
+            for (i, token) in arr.iter().enumerate() {
+                if let ethers::abi::Token::String(url) = token {
+                    println!("  {}. {}", i + 1, url);
+                }
+            }
+        } else {
+            println!("No endpoints found.");
+        }
+    } else {
+        println!("Failed to query endpoints: {:?}", response);
+    }
+    
     Ok(())
 }
 
@@ -602,10 +661,63 @@ async fn call_get_count(_contract: String) -> Result<()> {
     Ok(())
 }
 
-async fn call_has_endpoint(_contract: String, url: String) -> Result<()> {
-    println!("Checking if endpoint exists: {}", url);
-    println!("⚠️  Read operations temporarily disabled due to API changes");
-    println!("Use a block explorer to view contract state.");
+async fn call_has_endpoint(_contract: String, _url: String) -> Result<()> {
+    println!("⚠️  This feature not yet implemented");
+    Ok(())
+}
+
+async fn call_is_admin(contract: String, address: String) -> Result<()> {
+    println!("Checking if address is admin: {}", address);
+    
+    let config = Config::load("config.toml")?;
+    let contract_address: Address = contract.parse()?;
+    let check_address: Address = address.parse()?;
+    
+    // Call admins(address) public mapping
+    // Method ID: keccak256("admins(address)")[0:4]
+    let method_id = ethers::utils::keccak256("admins(address)")[0..4].to_vec();
+    
+    // Encode address parameter
+    let encoded = ethers::abi::encode(&[ethers::abi::Token::Address(check_address)]);
+    let call_data = [&method_id[..], &encoded].concat();
+    
+    // Use eth_call to query the contract
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "eth_call",
+        "params": [{
+            "to": format!("{:#x}", contract_address),
+            "data": format!("0x{}", hex::encode(&call_data))
+        }, "latest"],
+        "id": 1
+    });
+    
+    let client = reqwest::Client::new();
+    let response: serde_json::Value = client
+        .post(&config.network.rpc_url)
+        .json(&request)
+        .send()
+        .await?
+        .json()
+        .await?;
+    
+    if let Some(result) = response["result"].as_str() {
+        let result_bytes = hex::decode(result.trim_start_matches("0x"))?;
+        
+        // Decode the result: bool
+        let tokens = ethers::abi::decode(&[ethers::abi::ParamType::Bool], result_bytes.as_slice())?;
+        
+        if let Some(ethers::abi::Token::Bool(is_admin)) = tokens.first() {
+            if *is_admin {
+                println!("✅ {} IS an admin", address);
+            } else {
+                println!("❌ {} is NOT an admin", address);
+            }
+        }
+    } else {
+        println!("Failed to query admin status: {:?}", response);
+    }
+    
     Ok(())
 }
 
