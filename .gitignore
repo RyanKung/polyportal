@@ -72,3 +72,4 @@ private_keys/
 *.backup
 *~
 *wallet.toml
+target/*

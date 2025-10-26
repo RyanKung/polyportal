@@ -1,163 +1,191 @@
-//! Ethers client for native RPC interactions
-//! Only compiled when ethers feature is enabled
+//! PolyEndpoint Client
+//! 
+//! Provides a unified interface for native and WASM environments
 
-#![cfg(feature = "ethers")]
+use serde::{Deserialize, Serialize};
 
-use crate::contract;
-use ethers::{
-    providers::{Http, Middleware, Provider},
-    signers::{LocalWallet, Signer},
-    types::{Address, Bytes, TxResponse},
-};
+// Import the HTTP implementation based on target
+#[cfg(target_arch = "wasm32")]
+use crate::http_impl::wasm::make_rpc_call;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::http_impl::native::make_rpc_call;
 
 #[derive(Clone)]
-pub struct PolyEndpointClient<M: Middleware> {
-    contract_address: Address,
-    provider: M,
+pub struct PolyEndpointClient {
+    contract_address: String,
 }
 
-impl<M: Middleware> PolyEndpointClient<M> {
-    pub fn new(contract_address: Address, provider: M) -> Self {
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EndpointInfo {
+    pub url: String,
+    pub description: String,
+}
+
+impl PolyEndpointClient {
+    /// Create a new SDK instance with a contract address
+    pub fn new(contract_address: impl Into<String>) -> Self {
         Self {
-            contract_address,
-            provider,
+            contract_address: contract_address.into(),
         }
     }
 
-    pub fn contract_address(&self) -> Address {
-        self.contract_address
+    /// Get the contract address
+    pub fn contract_address(&self) -> &str {
+        &self.contract_address
     }
 
-    pub fn provider(&self) -> &M {
-        &self.provider
-    }
-}
-
-// Transaction methods
-impl<M> PolyEndpointClient<M>
-where
-    M: Middleware,
-    M::Error: 'static,
-{
-    /// Add an endpoint (requires admin or owner)
-    pub async fn add_endpoint(&self, endpoint: &str) -> Result<TxResponse, M::Error> {
-        let data = contract::encode_add_endpoint(endpoint).build();
-        self.send_transaction(data).await
-    }
-
-    /// Remove an endpoint (requires admin or owner)
-    pub async fn remove_endpoint(&self, endpoint: &str) -> Result<TxResponse, M::Error> {
-        let data = contract::encode_remove_endpoint(endpoint).build();
-        self.send_transaction(data).await
-    }
-
-    /// Add an admin (owner only)
-    pub async fn add_admin(&self, admin: &str) -> Result<TxResponse, M::Error> {
-        let admin_address: Address = admin.parse().unwrap();
-        let data = self.encode_address_method("addAdmin(address)", admin_address);
-        self.send_transaction(data).await
-    }
-
-    /// Remove an admin (owner only)
-    pub async fn remove_admin(&self, admin: &str) -> Result<TxResponse, M::Error> {
-        let admin_address: Address = admin.parse().unwrap();
-        let data = self.encode_address_method("removeAdmin(address)", admin_address);
-        self.send_transaction(data).await
-    }
-
-    /// Transfer ownership (owner only)
-    pub async fn transfer_ownership(&self, new_owner: &str) -> Result<TxResponse, M::Error> {
-        let new_owner_address: Address = new_owner.parse().unwrap();
-        let data = self.encode_address_method("transferOwnership(address)", new_owner_address);
-        self.send_transaction(data).await
-    }
-
-    async fn send_transaction(&self, data: Vec<u8>) -> Result<TxResponse, M::Error> {
-        use ethers::types::TransactionRequest;
-        let tx = TransactionRequest::new()
-            .to(self.contract_address)
-            .data(Bytes::from(data));
-        self.provider.send_transaction(tx, None).await
-    }
-}
-
-// View methods (read-only)
-impl<M> PolyEndpointClient<M>
-where
-    M: Middleware,
-    M::Error: 'static,
-{
-    /// Get total endpoint count
-    pub async fn get_endpoint_count(&self) -> Result<u64, M::Error> {
-        let data = contract::encode_get_endpoint_count().build();
-        self.call_read(data).await
-    }
-
-    /// Get all endpoints
-    pub async fn get_all_endpoints(&self) -> Result<Vec<String>, M::Error> {
-        let data = contract::encode_get_all_endpoints().build();
-        self.call_read(data).await
-    }
-
-    /// Get endpoint by index
-    pub async fn get_endpoint(&self, index: u64) -> Result<String, M::Error> {
-        let data = contract::encode_get_endpoint(index).build();
-        self.call_read(data).await
-    }
-
-    /// Check if endpoint exists
-    pub async fn has_endpoint(&self, endpoint: &str) -> Result<bool, M::Error> {
-        let data = contract::encode_has_endpoint(endpoint).build();
-        self.call_read(data).await
-    }
-
-    /// Get contract owner
-    pub async fn owner(&self) -> Result<Address, M::Error> {
-        let data = contract::encode_owner().build();
-        self.call_read(data).await
-    }
-
-    /// Check if address is admin
-    pub async fn admins(&self, admin: &str) -> Result<bool, M::Error> {
-        let admin_address: Address = admin.parse().unwrap();
-        let data = self.encode_address_method("admins(address)", admin_address);
-        self.call_read(data).await
-    }
-
-    async fn call_read(&self, data: Vec<u8>) -> Result<Bytes, M::Error> {
-        use ethers::types::TransactionRequest;
-        self.provider.call(
-            TransactionRequest::new()
-                .to(self.contract_address)
-                .data(Bytes::from(data)),
-            None,
-        ).await
-    }
-}
-
-// Encoding helpers
-impl<M: Middleware> PolyEndpointClient<M> {
-    fn encode_address_method(&self, signature: &str, address: Address) -> Vec<u8> {
-        use sha3::{Digest, Keccak256};
-        let method_id = {
-            let hash = Keccak256::digest(signature.as_bytes());
-            [hash[0], hash[1], hash[2], hash[3]]
-        };
+    /// Fetch all endpoints from the contract
+    /// 
+    /// # Arguments
+    /// 
+    /// * `network` - Network name ("mainnet", "sepolia", "polygon", "arbitrum") or custom RPC URL
+    /// 
+    /// # Returns
+    /// 
+    /// A vector of endpoint information containing URLs and descriptions
+    pub async fn get_endpoints(&self, network: impl AsRef<str>) -> Result<Vec<EndpointInfo>, ClientError> {
+        let network = network.as_ref();
+        let rpc_url = get_rpc_url_impl(network);
         
-        let mut data = method_id.to_vec();
-        let mut address_bytes = vec![0u8; 32];
-        address_bytes[12..].copy_from_slice(&address.to_fixed_bytes());
-        data.extend_from_slice(&address_bytes);
-        data
+        // Encode function selector: getAllEndpoints()
+        let method_id = "0x36346628"; // keccak256("getAllEndpoints()")[0:4]
+        
+        // Make RPC call
+        let payload = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "eth_call",
+            "params": [{
+                "to": self.contract_address,
+                "data": method_id
+            }, "latest"]
+        });
+
+        let response = make_rpc_call(rpc_url, &payload).await?;
+        let endpoints = decode_endpoints_response(response)?;
+        
+        Ok(endpoints)
     }
 }
 
-/// Create a client with HTTP provider (native only)
-#[cfg(feature = "std")]
-pub async fn create_client<A: Into<Address>>(
-    rpc_url: &str,
-    contract_address: A,
-) -> PolyEndpointClient<Provider<Http>> {
-    let provider = Provider::try_from(rpc_url).expect("Failed to create provider");
-    PolyEndpointClient::new(contract_address.into(), provider)
+#[derive(Debug, thiserror::Error)]
+pub enum ClientError {
+    #[error("Network error: {0}")]
+    Network(String),
+    
+    #[error("Parse error: {0}")]
+    Parse(String),
+    
+    #[error("Decode error: {0}")]
+    Decode(String),
+    
+    #[error("Invalid contract address")]
+    InvalidAddress,
 }
+
+
+fn get_rpc_url_impl(network: &str) -> &str {
+    match network.to_lowercase().as_str() {
+        "mainnet" => "https://eth.llamarpc.com",
+        "sepolia" => "https://rpc.sepolia.org",
+        "base" | "base-mainnet" => "https://mainnet.base.org",
+        "base-sepolia" | "base-testnet" => "https://sepolia.base.org",
+        "polygon" => "https://polygon-rpc.com",
+        "arbitrum" => "https://arb1.arbitrum.io/rpc",
+        _ => network,
+    }
+}
+
+fn decode_endpoints_response(response: String) -> Result<Vec<EndpointInfo>, ClientError> {
+    let json: serde_json::Value = serde_json::from_str(&response)
+        .map_err(|e| ClientError::Parse(format!("Parse error: {}", e)))?;
+    
+    // Check for error in response
+    if let Some(error) = json.get("error") {
+        // If error is "execution reverted", it means the contract call failed
+        // This could mean no endpoints are registered or the contract doesn't implement the method
+        let error_code = error.get("code").and_then(|c| c.as_u64()).unwrap_or(0);
+        let error_msg = error.get("message").and_then(|m| m.as_str()).unwrap_or("Unknown error");
+        
+        if error_code == 3 && error_msg.contains("execution reverted") {
+            // Contract reverted - likely no endpoints or invalid method
+            return Ok(Vec::new());
+        }
+        
+        let error_msg = format!("RPC error {}: {}", error_code, error_msg);
+        return Err(ClientError::Network(error_msg));
+    }
+    
+    let result = json.get("result")
+        .and_then(|r| r.as_str())
+        .ok_or_else(|| ClientError::Parse("No result in response".to_string()))?;
+    
+    let bytes = hex::decode(&result[2..])
+        .map_err(|e| ClientError::Decode(format!("Hex decode error: {}", e)))?;
+    
+    let endpoints = decode_abi_string_array(&bytes)
+        .map_err(|e| ClientError::Decode(format!("Decode error: {}", e)))?;
+    
+    Ok(endpoints)
+}
+
+fn decode_abi_string_array(bytes: &[u8]) -> Result<Vec<EndpointInfo>, Box<dyn std::error::Error>> {
+    if bytes.len() < 64 {
+        return Ok(vec![]);
+    }
+    
+    let urls_offset = parse_u256(&bytes[0..32])? as usize;
+    let descs_offset = parse_u256(&bytes[32..64])? as usize;
+    
+    let urls = decode_abi_string_array_inner(bytes, urls_offset)?;
+    let descriptions = decode_abi_string_array_inner(bytes, descs_offset)?;
+    
+    let endpoints = urls
+        .into_iter()
+        .zip(descriptions.into_iter())
+        .map(|(url, description)| EndpointInfo { url, description })
+        .collect();
+    
+    Ok(endpoints)
+}
+
+fn decode_abi_string_array_inner(bytes: &[u8], offset: usize) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    if bytes.len() < offset + 32 {
+        return Ok(vec![]);
+    }
+    
+    let len = parse_u256(&bytes[offset..offset+32])? as usize;
+    let mut strings = Vec::new();
+    let mut pos = offset + 32;
+    
+    for _ in 0..len {
+        if bytes.len() < pos + 32 {
+            break;
+        }
+        let string_offset = parse_u256(&bytes[pos..pos+32])? as usize;
+        
+        if bytes.len() >= string_offset + 32 {
+            let string_len = parse_u256(&bytes[string_offset..string_offset+32])? as usize;
+            if bytes.len() >= string_offset + 32 + string_len {
+                let string_bytes = &bytes[string_offset + 32..string_offset + 32 + string_len];
+                if let Ok(s) = String::from_utf8(string_bytes.to_vec()) {
+                    strings.push(s);
+                }
+            }
+        }
+        
+        pos += 32;
+    }
+    
+    Ok(strings)
+}
+
+fn parse_u256(bytes: &[u8]) -> Result<u64, Box<dyn std::error::Error>> {
+    if bytes.len() < 32 {
+        return Err("Not enough bytes".into());
+    }
+    let mut arr = [0u8; 8];
+    arr.copy_from_slice(&bytes[24..32]);
+    Ok(u64::from_be_bytes(arr))
+}
+

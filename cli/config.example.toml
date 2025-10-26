@@ -31,3 +31,9 @@ bytecode_path = "../artifacts/contracts/PolyEndpoint.sol/PolyEndpoint.json"
 # name = "mainnet"
 # rpc_url = "https://mainnet.infura.io/v3/YOUR_INFURA_KEY"
 # chain_id = 1
+
+# Example for Base Sepolia (Testnet)
+# [network]
+# name = "base-sepolia"
+# rpc_url = "https://sepolia.base.org"
+# chain_id = 84532

@@ -1,0 +1,75 @@
+[network]
+# Network configuration
+# Options: localhost, sepolia, mainnet, etc.
+name = "localhost"
+rpc_url = "http://127.0.0.1:8545"
+chain_id = 1337
+
+[deployer]
+# Account configuration - will be populated after running 'import-key'
+# DO NOT fill these manually
+address = ""
+encrypted_key = ""
+
+[contract]
+# Contract configuration
+abi_path = "../artifacts/contracts/PolyEndpoint.sol/PolyEndpoint.json"
+bytecode_path = "../artifacts/contracts/PolyEndpoint.sol/PolyEndpoint.json"
+
+# ==================================================
+# Example Network Configurations
+# Uncomment and modify as needed
+# ==================================================
+
+# Example for Sepolia testnet
+# [network]
+# name = "sepolia"
+# rpc_url = "https://sepolia.infura.io/v3/YOUR_INFURA_KEY"
+# chain_id = 11155111
+
+# Example for Goerli testnet
+# [network]
+# name = "goerli"
+# rpc_url = "https://goerli.infura.io/v3/YOUR_INFURA_KEY"
+# chain_id = 5
+
+# Example for Mainnet
+# [network]
+# name = "mainnet"
+# rpc_url = "https://mainnet.infura.io/v3/YOUR_INFURA_KEY"
+# chain_id = 1
+
+# Example for Polygon
+# [network]
+# name = "polygon"
+# rpc_url = "https://polygon-rpc.com"
+# chain_id = 137
+
+# Example for Arbitrum One
+# [network]
+# name = "arbitrum"
+# rpc_url = "https://arb1.arbitrum.io/rpc"
+# chain_id = 42161
+
+# ==================================================
+# Setup Instructions
+# ==================================================
+# 1. Copy this file to config.toml:
+#    cp config.example.toml config.toml
+#
+# 2. Import your private key:
+#    cargo run -- import-key
+#    (This will encrypt your key and populate [deployer] section)
+#
+# 3. Update [network] section if not using localhost
+#
+# 4. Deploy:
+#    cargo run -- deploy
+#
+# ==================================================
+# Security Notes
+# ==================================================
+# - NEVER commit config.toml (it's git-ignored)
+# - NEVER share your private key
+# - NEVER share your password
+# - Keep your password safe - you'll need it for each operation

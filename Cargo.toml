@@ -1,0 +1,46 @@
+[workspace]
+resolver = "2"
+
+members = [
+    "cli",
+    "sdk",
+]
+
+# Shared dependencies for all workspace members
+[workspace.dependencies]
+ethers = "2.0"
+ethers-middleware = { package = "ethers-middleware", version = "2.0", default-features = false }
+ethers-providers = { package = "ethers-providers", version = "2.0", default-features = false }
+ethers-core = { package = "ethers-core", version = "2.0", default-features = false }
+ethers-signers = { package = "ethers-signers", version = "2.0", default-features = false }
+tokio = { version = "1.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+anyhow = "1.0"
+hex = "0.4"
+clap = { version = "4.0", features = ["derive"] }
+aes-gcm = "0.10"
+sha2 = "0.10"
+rpassword = "7.3"
+rand = "0.8"
+reqwest = { version = "0.11", features = ["json", "blocking"] }
+sha3 = "0.10"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["PolyPortal Contributors"]
+repository = "https://github.com/yourusername/polyportal"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+
+[profile.dev]
+opt-level = 0
+debug = true
+

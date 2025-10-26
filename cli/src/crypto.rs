@@ -17,11 +17,11 @@ pub fn encrypt_private_key(key: &str, password: &str) -> Result<String> {
     // Derive encryption key from password + salt
     let mut hasher = Sha256::new();
     hasher.update(password.as_bytes());
-    hasher.update(&salt);
+    hasher.update(salt);
     let encryption_key = hasher.finalize();
     
     // Encrypt the private key
-    let cipher = Aes256Gcm::new(&encryption_key.into());
+    let cipher = Aes256Gcm::new_from_slice(&encryption_key)?;
     let nonce = Aes256Gcm::generate_nonce(&mut rand::thread_rng());
     
     let private_key_bytes = hex::decode(key.strip_prefix("0x").unwrap_or(key))
@@ -59,11 +59,11 @@ pub fn decrypt_private_key(encrypted: &str, password: &str) -> Result<String> {
     let encryption_key = hasher.finalize();
     
     // Decrypt
-    let cipher = Aes256Gcm::new(&encryption_key.into());
+    let cipher = Aes256Gcm::new_from_slice(&encryption_key)?;
     #[allow(deprecated)]
     let nonce = Nonce::from_slice(nonce_bytes);
     
-    let plaintext = cipher.decrypt(&nonce, ciphertext)
+    let plaintext = cipher.decrypt(nonce, ciphertext)
         .map_err(|_| anyhow::anyhow!("Decryption failed - wrong password?"))?;
     
     Ok(format!("0x{}", hex::encode(plaintext)))

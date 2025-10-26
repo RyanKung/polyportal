@@ -41,12 +41,14 @@ enum Commands {
         #[arg(short, long)]
         name: String,
     },
-    /// Add an endpoint
+    /// Add an endpoint with description
     AddEndpoint {
         #[arg(short, long)]
         url: String,
         #[arg(short, long)]
         contract: String,
+        #[arg(short, long, default_value = "")]
+        description: String,
     },
     /// Remove an endpoint
     RemoveEndpoint {
@@ -115,8 +117,8 @@ async fn main() -> Result<()> {
         Commands::Deploy => {
             deploy_contract().await?;
         }
-        Commands::AddEndpoint { url, contract } => {
-            call_add_endpoint(contract, url).await?;
+        Commands::AddEndpoint { url, contract, description } => {
+            call_add_endpoint(contract, &url, &description).await?;
         }
         Commands::RemoveEndpoint { url, contract } => {
             call_remove_endpoint(contract, url).await?;
@@ -429,7 +431,7 @@ async fn init_cli() -> Result<()> {
     println!();
     println!("Network: {} (Chain ID: {})", chain_name, chain_id);
     println!("RPC URL: {}", config.network.rpc_url);
-    println!("Wallet: {} -> {}", wallet_name, format!("{:#x}", address));
+    println!("Wallet: {} -> {:#x}", wallet_name, address);
     println!("Config saved to: config.toml");
     println!("Wallets saved to: wallet.toml");
     println!();
@@ -469,8 +471,11 @@ async fn get_contract_abi() -> Result<serde_json::Value> {
     Ok(serde_json::from_str(&abi_str)?)
 }
 
-async fn call_add_endpoint(contract: String, url: String) -> Result<()> {
+async fn call_add_endpoint(contract: String, url: &str, description: &str) -> Result<()> {
     println!("Adding endpoint: {}", url);
+    if !description.is_empty() {
+        println!("Description: {}", description);
+    }
     println!("Contract: {}", contract);
     
     let config = Config::load("config.toml")
@@ -482,13 +487,16 @@ async fn call_add_endpoint(contract: String, url: String) -> Result<()> {
     let contract_address: Address = contract.parse()
         .context("Invalid contract address")?;
     
-    // Manual ABI encoding for addEndpoint(string)
-    // Function signature: addEndpoint(string)
-    // Method ID: 0x + first 4 bytes of keccak256("addEndpoint(string)")
-    let method_id = ethers::utils::keccak256("addEndpoint(string)")[0..4].to_vec();
+    // Manual ABI encoding for addEndpoint(string,string)
+    // Function signature: addEndpoint(string,string)
+    // Method ID: 0x + first 4 bytes of keccak256("addEndpoint(string,string)")
+    let method_id = ethers::utils::keccak256("addEndpoint(string,string)")[0..4].to_vec();
     
-    // Encode string parameter
-    let encoded = ethers::abi::encode(&[ethers::abi::Token::String(url.clone())]);
+    // Encode two string parameters
+    let encoded = ethers::abi::encode(&[
+        ethers::abi::Token::String(url.to_string()),
+        ethers::abi::Token::String(description.to_string())
+    ]);
     let full_data = [&method_id[..], &encoded].concat();
     
     let tx = TransactionRequest::new()
@@ -632,21 +640,55 @@ async fn call_get_endpoints(contract: String) -> Result<()> {
     if let Some(result) = response["result"].as_str() {
         let result_bytes = hex::decode(result.trim_start_matches("0x"))?;
         
-        // Decode the result: string[] memory
-        let tokens = ethers::abi::decode(&[ethers::abi::ParamType::Array(
-            Box::new(ethers::abi::ParamType::String)
-        )], result_bytes.as_slice())?;
+        // Decode the result: (string[] memory, string[] memory)
+        // Updated signature: getAllEndpoints() returns (string[], string[])
+        let tokens = ethers::abi::decode(&[
+            ethers::abi::ParamType::Array(Box::new(ethers::abi::ParamType::String)),
+            ethers::abi::ParamType::Array(Box::new(ethers::abi::ParamType::String))
+        ], result_bytes.as_slice())?;
         
-        if let Some(ethers::abi::Token::Array(arr)) = tokens.first() {
-            println!("\n✅ Found {} endpoints:\n", arr.len());
-            for (i, token) in arr.iter().enumerate() {
-                if let ethers::abi::Token::String(url) = token {
+        if tokens.len() == 2 {
+            let urls = if let Some(ethers::abi::Token::Array(arr)) = tokens.first() {
+                arr.iter().filter_map(|token| {
+                    if let ethers::abi::Token::String(s) = token {
+                        Some(s.clone())
+                    } else {
+                        None
+                    }
+                }).collect::<Vec<_>>()
+            } else {
+                vec![]
+            };
+            
+            let descriptions = if let Some(ethers::abi::Token::Array(arr)) = tokens.get(1) {
+                arr.iter().filter_map(|token| {
+                    if let ethers::abi::Token::String(s) = token {
+                        Some(s.clone())
+                    } else {
+                        None
+                    }
+                }).collect::<Vec<_>>()
+            } else {
+                vec![]
+            };
+            
+            println!("\n✅ Found {} endpoints:\n", urls.len());
+            for (i, url) in urls.iter().enumerate() {
+                if let Some(desc) = descriptions.get(i) {
+                    if !desc.is_empty() {
+                        println!("  {}. {} - {}", i + 1, url, desc);
+                    } else {
+                        println!("  {}. {}", i + 1, url);
+                    }
+                } else {
                     println!("  {}. {}", i + 1, url);
                 }
             }
         } else {
             println!("No endpoints found.");
         }
+    } else if let Some(error) = response["error"].as_object() {
+        eprintln!("RPC Error: {:?}", error);
     } else {
         println!("Failed to query endpoints: {:?}", response);
     }

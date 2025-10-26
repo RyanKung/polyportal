@@ -1,0 +1,12 @@
+[network]
+name = "base-sepolia"
+rpc_url = "https://sepolia.base.org"
+chain_id = 84532
+
+[deployer]
+address = ""
+encrypted_key = ""
+
+[contract]
+abi_path = "../artifacts/contracts/PolyEndpoint.sol/PolyEndpoint.json"
+bytecode_path = "../artifacts/contracts/PolyEndpoint.sol/PolyEndpoint.json"

@@ -12,8 +12,14 @@ contract PolyEndpoint {
     // Mapping to track if an address is an admin
     mapping(address => bool) public admins;
     
-    // Array to store all registered endpoints
-    string[] private endpoints;
+    // Endpoint information structure
+    struct EndpointInfo {
+        string url;
+        string description;
+    }
+    
+    // Storage for endpoints with descriptions
+    EndpointInfo[] private endpoints;
     
     // Mapping to check if an endpoint already exists
     mapping(string => bool) private endpointExists;
@@ -21,8 +27,8 @@ contract PolyEndpoint {
     // Events
     event AdminAdded(address indexed admin);
     event AdminRemoved(address indexed admin);
-    event EndpointAdded(string indexed endpoint);
-    event EndpointRemoved(string indexed endpoint);
+    event EndpointAdded(string indexed url, string description);
+    event EndpointRemoved(string indexed url);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     constructor() {
@@ -70,36 +76,45 @@ contract PolyEndpoint {
     }
 
     /**
-     * @dev Add an endpoint (admin or owner only)
-     * @param endpoint The endpoint URL to be added
+     * @dev Add an endpoint with description (admin or owner only)
+     * @param url The endpoint URL to be added
+     * @param description The description of the endpoint
      */
-    function addEndpoint(string memory endpoint) public onlyAdminOrOwner {
-        require(bytes(endpoint).length > 0, "PolyEndpoint: endpoint cannot be empty");
-        require(!endpointExists[endpoint], "PolyEndpoint: endpoint already exists");
+    function addEndpoint(string memory url, string memory description) public onlyAdminOrOwner {
+        require(bytes(url).length > 0, "PolyEndpoint: endpoint cannot be empty");
+        require(!endpointExists[url], "PolyEndpoint: endpoint already exists");
         
-        endpoints.push(endpoint);
-        endpointExists[endpoint] = true;
-        emit EndpointAdded(endpoint);
+        endpoints.push(EndpointInfo(url, description));
+        endpointExists[url] = true;
+        emit EndpointAdded(url, description);
+    }
+    
+    /**
+     * @dev Overloaded function for backward compatibility - add endpoint without description
+     * @param url The endpoint URL to be added
+     */
+    function addEndpoint(string memory url) public onlyAdminOrOwner {
+        addEndpoint(url, "");
     }
 
     /**
      * @dev Remove an endpoint (admin or owner only)
-     * @param endpoint The endpoint URL to be removed
+     * @param url The endpoint URL to be removed
      */
-    function removeEndpoint(string memory endpoint) public onlyAdminOrOwner {
-        require(endpointExists[endpoint], "PolyEndpoint: endpoint does not exist");
+    function removeEndpoint(string memory url) public onlyAdminOrOwner {
+        require(endpointExists[url], "PolyEndpoint: endpoint does not exist");
         
         // Find and remove the endpoint from the array
         for (uint256 i = 0; i < endpoints.length; i++) {
-            if (keccak256(bytes(endpoints[i])) == keccak256(bytes(endpoint))) {
+            if (keccak256(bytes(endpoints[i].url)) == keccak256(bytes(url))) {
                 endpoints[i] = endpoints[endpoints.length - 1];
                 endpoints.pop();
                 break;
             }
         }
         
-        endpointExists[endpoint] = false;
-        emit EndpointRemoved(endpoint);
+        endpointExists[url] = false;
+        emit EndpointRemoved(url);
     }
 
     /**
@@ -112,29 +127,38 @@ contract PolyEndpoint {
 
     /**
      * @dev Get all registered endpoints
-     * @return An array of all endpoint URLs
+     * @return urls An array of all endpoint URLs
+     * @return descriptions An array of all endpoint descriptions
      */
-    function getAllEndpoints() public view returns (string[] memory) {
-        return endpoints;
+    function getAllEndpoints() public view returns (string[] memory urls, string[] memory descriptions) {
+        urls = new string[](endpoints.length);
+        descriptions = new string[](endpoints.length);
+        
+        for (uint256 i = 0; i < endpoints.length; i++) {
+            urls[i] = endpoints[i].url;
+            descriptions[i] = endpoints[i].description;
+        }
     }
 
     /**
      * @dev Get an endpoint by index
      * @param index The index of the endpoint
-     * @return The endpoint URL at the given index
+     * @return url The endpoint URL at the given index
+     * @return description The endpoint description
      */
-    function getEndpoint(uint256 index) public view returns (string memory) {
+    function getEndpoint(uint256 index) public view returns (string memory url, string memory description) {
         require(index < endpoints.length, "PolyEndpoint: index out of bounds");
-        return endpoints[index];
+        EndpointInfo memory info = endpoints[index];
+        return (info.url, info.description);
     }
 
     /**
      * @dev Check if an endpoint exists
-     * @param endpoint The endpoint URL to check
+     * @param url The endpoint URL to check
      * @return True if the endpoint exists, false otherwise
      */
-    function hasEndpoint(string memory endpoint) public view returns (bool) {
-        return endpointExists[endpoint];
+    function hasEndpoint(string memory url) public view returns (bool) {
+        return endpointExists[url];
     }
 
     /**
