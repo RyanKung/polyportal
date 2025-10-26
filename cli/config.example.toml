@@ -1,0 +1,33 @@
+[network]
+# Network configuration
+# Options: localhost, sepolia, mainnet, etc.
+name = "localhost"
+rpc_url = "http://127.0.0.1:8545"
+chain_id = 1337
+
+[deployer]
+# Account configuration - will be populated after running 'import-key'
+# DO NOT fill these manually
+address = ""
+encrypted_key = ""
+
+[contract]
+# Contract configuration
+abi_path = "../artifacts/contracts/PolyEndpoint.sol/PolyEndpoint.json"
+bytecode_path = "../artifacts/contracts/PolyEndpoint.sol/PolyEndpoint.json"
+
+# ==================================================
+# Example Network Configurations
+# ==================================================
+
+# Example for Sepolia testnet
+# [network]
+# name = "sepolia"
+# rpc_url = "https://sepolia.infura.io/v3/YOUR_INFURA_KEY"
+# chain_id = 11155111
+
+# Example for Mainnet
+# [network]
+# name = "mainnet"
+# rpc_url = "https://mainnet.infura.io/v3/YOUR_INFURA_KEY"
+# chain_id = 1

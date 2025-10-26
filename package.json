@@ -1,0 +1,17 @@
+{
+  "name": "polyportal",
+  "version": "0.1.0",
+  "description": "PolyPortal - Decentralized service registration and discovery",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "test:forge": "forge test",
+    "test:anvil": "anvil",
+    "deploy": "hardhat run scripts/deploy.js",
+    "node": "hardhat node"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "hardhat": "^2.19.0"
+  }
+}

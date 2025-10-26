@@ -1,0 +1,74 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Markdown files (except README.md)
+*.md
+!README.md
+
+# Environment variables - NEVER COMMIT THESE
+.env
+.env.local
+.env.*.local
+.env.production
+
+# Hardhat files
+artifacts/
+cache/
+typechain-types/
+
+# Coverage reports
+coverage/
+coverage.json
+.nyc_output/
+
+# Debug logs
+debug.log
+hardhat.log
+
+# Foundry files
+out/
+lib/
+.broadcast/
+cache_forge/
+
+# CLI files
+cli/target/
+cli/config.toml
+cli/Cargo.lock
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+.DS_Store
+
+# OS files
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+~*
+
+# Private keys and secrets - NEVER COMMIT THESE
+*.pem
+*.key
+*.secret
+secrets/
+private_keys/
+*.encrypted
+
+# Test files with sensitive data
+*test_keys*.json
+*local*.json
+
+# Backup files
+*.bak
+*.backup
+*~
+*wallet.toml

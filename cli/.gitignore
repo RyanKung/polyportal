@@ -1,0 +1,15 @@
+# Rust build artifacts
+/target/
+Cargo.lock
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Config with sensitive data - never commit this!
+config.toml
+wallet.toml
+# Template config file is ok to commit
+!config.template.toml
